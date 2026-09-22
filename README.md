@@ -1,5 +1,9 @@
 # SecureStore
 
+> **Proprietary software.** Copyright © 2026 Brandon Mathis. All rights reserved.
+> No permission is granted to use, copy, modify, or distribute this software
+> without prior written authorization. See [LICENSE.md](LICENSE.md).
+
 One interface over the operating system credential vault: macOS Keychain, Windows Credential
 Manager, and the Linux Secret Service. A desktop application keeps refresh tokens and API
 credentials out of its own files. A server application that keeps secrets outside its database uses
@@ -8,7 +12,7 @@ the same interface.
 ## Install
 
 ```
-dotnet add package Mathis.SecureStore
+dotnet add package Darkspyre.SecureStore
 ```
 
 ## Use
