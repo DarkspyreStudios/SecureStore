@@ -26,6 +26,16 @@ public sealed class SecureStoreOptions
     /// </summary>
     public Func<ICredentialStore>? Fallback { get; set; }
 
+    /// <summary>
+    /// Asks for a vault in which the operating system refuses every other application access to
+    /// this application's secrets. On macOS it selects
+    /// <see cref="MacDataProtectionKeychainCredentialStore"/>, which requires a signed application
+    /// bundle with a keychain access group entitlement. Windows Credential Manager and the Linux
+    /// Secret Service offer no isolation between applications of one user, so on those hosts it
+    /// has no effect. It defaults to <see langword="false"/>.
+    /// </summary>
+    public bool RequireApplicationIsolation { get; set; }
+
     internal string ResolvedLabel =>
         string.IsNullOrWhiteSpace(Label) ? ServiceName : Label;
 

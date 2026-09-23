@@ -6,7 +6,10 @@ public static class CredentialStoreFactory
     /// <summary>
     /// Builds the store for this host. A host that is not macOS, Windows, or Linux gets
     /// <see cref="SecureStoreOptions.Fallback"/>, and <see cref="UnsupportedPlatformCredentialStore"/>
-    /// when the application has not set one.
+    /// when the application has not set one. On macOS,
+    /// <see cref="SecureStoreOptions.RequireApplicationIsolation"/> selects
+    /// <see cref="MacDataProtectionKeychainCredentialStore"/> in place of
+    /// <see cref="MacKeychainCredentialStore"/>.
     /// </summary>
     public static ICredentialStore Create(SecureStoreOptions options)
     {
@@ -15,7 +18,9 @@ public static class CredentialStoreFactory
 
         if (OperatingSystem.IsMacOS())
         {
-            return new MacKeychainCredentialStore(options);
+            return options.RequireApplicationIsolation
+                ? new MacDataProtectionKeychainCredentialStore(options)
+                : new MacKeychainCredentialStore(options);
         }
 
         if (OperatingSystem.IsWindows())

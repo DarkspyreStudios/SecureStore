@@ -46,6 +46,64 @@ public sealed class SecureStoreOptionsTests
     }
 
     [Fact]
+    public void ApplicationIsolationIsOffByDefault()
+    {
+        var options = new SecureStoreOptions { ServiceName = "com.example.app" };
+
+        Assert.False(options.RequireApplicationIsolation);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void FactorySelectsTheMacBackendForApplicationIsolation(bool requireApplicationIsolation)
+    {
+        if (!OperatingSystem.IsMacOS())
+        {
+            return;
+        }
+
+        var options = new SecureStoreOptions
+        {
+            ServiceName = "com.example.app",
+            RequireApplicationIsolation = requireApplicationIsolation
+        };
+
+        ICredentialStore store = CredentialStoreFactory.Create(options);
+
+        Type expected = requireApplicationIsolation
+            ? typeof(MacDataProtectionKeychainCredentialStore)
+            : typeof(MacKeychainCredentialStore);
+        Assert.IsType(expected, store);
+    }
+
+    [Fact]
+    public void ApplicationIsolationHasNoEffectOnWindows()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        var options = new SecureStoreOptions { ServiceName = "com.example.app", RequireApplicationIsolation = true };
+
+        Assert.IsType<WindowsCredentialManagerCredentialStore>(CredentialStoreFactory.Create(options));
+    }
+
+    [Fact]
+    public void ApplicationIsolationHasNoEffectOnLinux()
+    {
+        if (!OperatingSystem.IsLinux())
+        {
+            return;
+        }
+
+        var options = new SecureStoreOptions { ServiceName = "com.example.app", RequireApplicationIsolation = true };
+
+        Assert.IsType<LinuxSecretServiceCredentialStore>(CredentialStoreFactory.Create(options));
+    }
+
+    [Fact]
     public async Task UnsupportedPlatformStoreExplainsTheOption()
     {
         var store = new UnsupportedPlatformCredentialStore();

@@ -27,6 +27,26 @@ public sealed class NativeVaultTests
         await RunVaultContractAsync(store);
     }
 
+    /// <summary>
+    /// The test host is an unsigned process with no keychain access group, so the data protection
+    /// keychain refuses it. A round trip needs a signed application bundle and runs outside this suite.
+    /// </summary>
+    [Fact]
+    public async Task MacDataProtectionKeychainRefusesAnUnentitledProcess()
+    {
+        if (!OperatingSystem.IsMacOS())
+        {
+            return;
+        }
+
+        using var store = new MacDataProtectionKeychainCredentialStore(Options);
+        ValueTask<string?> read = store.GetAsync("test-" + Guid.NewGuid().ToString("N"));
+
+        SecureStoreException exception = await Assert.ThrowsAsync<SecureStoreException>(async () => await read);
+
+        Assert.Contains("keychain-access-groups", exception.Message, StringComparison.Ordinal);
+    }
+
     [Fact]
     public async Task WindowsCredentialManagerRoundTrip()
     {
