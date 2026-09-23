@@ -1,4 +1,4 @@
-<img src=".github/banner.svg" alt="Darkspyre SecureStore">
+<img src="https://github.com/DarkspyreStudios/SecureStore/raw/main/.github/banner.svg" alt="Darkspyre SecureStore">
 
 # SecureStore
 
@@ -236,6 +236,27 @@ must ship as a `.app` bundle that carries:
 ```
 
 A bare command-line executable cannot carry a provisioning profile, so it cannot use this backend.
+
+A Developer ID build is signed with the hardened runtime, which Apple requires for notarization.
+The .NET runtime does not start under the hardened runtime without these entitlements beside the
+keychain entitlements:
+
+```xml
+<key>com.apple.security.cs.allow-jit</key>
+<true/>
+<key>com.apple.security.cs.allow-unsigned-executable-memory</key>
+<true/>
+<key>com.apple.security.cs.disable-library-validation</key>
+<true/>
+```
+
+`codesign` rejects a bundle whose `Contents/MacOS` directory holds files that are not signed code,
+such as `.dll` and `.json` files. Publish the application as one self-contained file and place that
+executable in `Contents/MacOS`:
+
+```
+dotnet publish -c Release -r osx-arm64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true
+```
 
 The store checks access on its first call. A process without the entitlement gets a
 `SecureStoreException` naming the missing entitlement on every call, reads included, so a release
