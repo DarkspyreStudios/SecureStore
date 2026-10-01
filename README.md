@@ -2,9 +2,14 @@
 
 # SecureStore
 
+<!-- ownership-notice:start -->
 > **Proprietary software.** Copyright © 2026 Brandon Mathis. All rights reserved.
 > No permission is granted to use, copy, modify, or distribute this software
-> without prior written authorization. See [LICENSE.md](LICENSE.md).
+> without prior written authorization.
+> Any contribution, including code, reviews, patches, issues and designs, is
+> assigned to Brandon Mathis on submission. See [LICENSE.md](LICENSE.md) and
+> [CONTRIBUTING.md](CONTRIBUTING.md).
+<!-- ownership-notice:end -->
 
 SecureStore keeps an application's secrets in the operating system credential vault. It exposes
 one small interface, `ICredentialStore`, over macOS Keychain, Windows Credential Manager, and the
