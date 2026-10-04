@@ -35,6 +35,13 @@ those differences:
 SecureStore stores secrets only. Use `Darkspyre.Persistence` for ordinary application files and
 blobs.
 
+## Local source consumption
+
+`eng/SourceReferences.targets` replaces a consumer's `Darkspyre.SecureStore` package reference
+with the `src/SecureStore/SecureStore.csproj` project in this worktree. The consumer imports it
+after declaring package references. Reference metadata is retained; runtime exclusions disable
+output copying, and compile exclusions disable the assembly reference.
+
 ## Install
 
 ```

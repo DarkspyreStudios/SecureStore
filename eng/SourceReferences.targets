@@ -1,0 +1,11 @@
+<Project>
+  <!-- Source consumers import this target after their package and shared-library references. -->
+  <ItemGroup>
+    <_SecureStoreSourceProject Include="@(PackageReference->WithMetadataValue('Identity', 'Darkspyre.SecureStore')->'$(MSBuildThisFileDirectory)../src/SecureStore/SecureStore.csproj')" />
+    <PackageReference Remove="Darkspyre.SecureStore" />
+    <ProjectReference Include="@(_SecureStoreSourceProject)">
+      <Private Condition="'%(ExcludeAssets)' == 'all' or $([System.String]::Copy(';%(ExcludeAssets);').Contains(';runtime;'))">false</Private>
+      <ReferenceOutputAssembly Condition="'%(ExcludeAssets)' == 'all' or $([System.String]::Copy(';%(ExcludeAssets);').Contains(';compile;'))">false</ReferenceOutputAssembly>
+    </ProjectReference>
+  </ItemGroup>
+</Project>
