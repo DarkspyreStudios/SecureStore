@@ -6,3 +6,5 @@ artifacts/
 *.suo
 .idea/
 .vscode/
+
+tmp/
