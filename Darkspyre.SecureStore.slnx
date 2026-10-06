@@ -1,8 +1,10 @@
 <Solution>
   <Folder Name="/src/">
+    <Project Path="src/Encryption/Encryption.csproj" />
     <Project Path="src/SecureStore/SecureStore.csproj" />
   </Folder>
   <Folder Name="/tests/">
+    <Project Path="tests/Encryption.Tests/Encryption.Tests.csproj" />
     <Project Path="tests/SecureStore.Tests/SecureStore.Tests.csproj" />
   </Folder>
 </Solution>

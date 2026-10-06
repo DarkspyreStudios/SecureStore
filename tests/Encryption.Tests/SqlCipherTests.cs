@@ -1,0 +1,212 @@
+using System.Text;
+using Darkspyre.Encryption;
+using Microsoft.Data.Sqlite;
+
+namespace Encryption.Tests;
+
+/// <summary>
+/// Loads the prebuilt SQLCipher library named by <c>DARKSPYRE_SQLCIPHER_LIBRARY</c>, or found under
+/// <c>DARKSPYRE_NATIVE_DRIVERS</c> at <c>sqlcipher/4.19.0-osx-arm64/libsqlcipher.dylib</c>. Without either, every
+/// database test fails with a message naming the variables; it never passes without SQLCipher.
+/// </summary>
+public sealed class SqlCipherFixture
+{
+    public SqlCipherFixture()
+    {
+        string? library = Environment.GetEnvironmentVariable("DARKSPYRE_SQLCIPHER_LIBRARY");
+        string? drivers = Environment.GetEnvironmentVariable("DARKSPYRE_NATIVE_DRIVERS");
+        if (string.IsNullOrEmpty(library) && !string.IsNullOrEmpty(drivers))
+            library = Path.Combine(drivers, "sqlcipher", "4.19.0-osx-arm64", "libsqlcipher.dylib");
+        if (string.IsNullOrEmpty(library))
+            throw new InvalidOperationException("Set DARKSPYRE_SQLCIPHER_LIBRARY or DARKSPYRE_NATIVE_DRIVERS to run the SQLCipher tests.");
+        SqlCipher.Initialize(library);
+    }
+}
+
+[CollectionDefinition("SqlCipher")]
+public sealed class SqlCipherGroup : ICollectionFixture<SqlCipherFixture>;
+
+[Collection("SqlCipher")]
+public sealed class SqlCipherTests : IDisposable
+{
+    private const string Secret = "the quick transcript about the harbor lighthouse";
+    private readonly string folder = Path.Combine(AppContext.BaseDirectory, "sqlcipher-tests", Guid.NewGuid().ToString("N"));
+    private readonly VaultKey root = VaultKey.Generate();
+
+    public SqlCipherTests(SqlCipherFixture fixture)
+    {
+        _ = fixture;
+        Directory.CreateDirectory(folder);
+    }
+
+    [Fact]
+    public void LoadedLibraryIsSqlCipher() => Assert.StartsWith("4.19.0", SqlCipher.Version, StringComparison.Ordinal);
+
+    [Fact]
+    public void KeyedDatabaseKeepsPlaintextOutOfTheFileAndWal()
+    {
+        string path = File("sessions.db");
+        using StoreKey key = Key("sessions");
+        using (SqlCipherDatabase database = new(path, key))
+        using (SqliteConnection connection = database.Open())
+        {
+            Execute(connection, "PRAGMA journal_mode = WAL; CREATE TABLE messages (id INTEGER PRIMARY KEY, body TEXT);");
+            Insert(connection, Secret);
+            Assert.Equal(Secret, Scalar(connection, "SELECT body FROM messages;"));
+            AssertAbsent(path);
+            AssertAbsent(path + "-wal");
+        }
+        Assert.True(SqlCipherDatabase.IsEncrypted(path));
+    }
+
+    [Fact]
+    public void EncryptedDatabaseWithoutAKeyReportsKeyRequired()
+    {
+        string path = CreateEncrypted("sessions");
+        Assert.Equal(EncryptionFailure.KeyRequired, Assert.Throws<EncryptionException>(() => SqlCipherDatabase.OpenPlain(path)).Failure);
+    }
+
+    [Fact]
+    public void WrongKeyReportsKeyRejected()
+    {
+        string path = CreateEncrypted("sessions");
+        using StoreKey wrong = Key("other");
+        using SqlCipherDatabase database = new(path, StoreKey.FromBytes("sessions", 1, Bytes(wrong)));
+        Assert.Equal(EncryptionFailure.KeyRejected, Assert.Throws<EncryptionException>(() => database.Open()).Failure);
+    }
+
+    [Fact]
+    public void LockedDatabaseReopensWithItsKey()
+    {
+        string path = CreateEncrypted("sessions");
+        using StoreKey key = Key("sessions");
+        using SqlCipherDatabase database = new(path, key);
+        using (SqliteConnection connection = database.Open()) Assert.Equal(Secret, Scalar(connection, "SELECT body FROM messages;"));
+        database.Lock();
+        using (SqliteConnection connection = database.Open()) Assert.Equal(Secret, Scalar(connection, "SELECT body FROM messages;"));
+    }
+
+    [Fact]
+    public void Fts5SearchWorksOnAnEncryptedDatabaseAfterReopen()
+    {
+        string path = File("index.db");
+        using StoreKey key = Key("memory.index");
+        using (SqlCipherDatabase database = new(path, key, pooling: false))
+        using (SqliteConnection connection = database.Open())
+        {
+            Execute(connection, "CREATE VIRTUAL TABLE docs USING fts5(body);");
+            Execute(connection, $"INSERT INTO docs (body) VALUES ('{Secret}'), ('nothing relevant here');");
+        }
+        using (SqlCipherDatabase database = new(path, key, pooling: false))
+        using (SqliteConnection connection = database.Open())
+            Assert.Equal(Secret, Scalar(connection, "SELECT body FROM docs WHERE docs MATCH 'lighthouse';"));
+        AssertAbsent(path);
+    }
+
+    [Fact]
+    public void ConversionRoundTripKeepsContent()
+    {
+        string plain = File("plain.db");
+        using (SqliteConnection connection = SqlCipherDatabase.OpenPlain(plain, pooling: false))
+        {
+            Execute(connection, "PRAGMA journal_mode = WAL; PRAGMA user_version = 7; CREATE TABLE messages (id INTEGER PRIMARY KEY, body TEXT, data BLOB);" +
+                "CREATE TABLE settings (name TEXT PRIMARY KEY, value REAL) WITHOUT ROWID; CREATE VIRTUAL TABLE docs USING fts5(body);");
+            Insert(connection, Secret);
+            Execute(connection, "INSERT INTO messages (body, data) VALUES (NULL, x'00ff10'); INSERT INTO settings VALUES ('ratio', 0.5);" +
+                $"INSERT INTO docs (body) VALUES ('{Secret}');");
+        }
+
+        string encrypted = File("encrypted.db");
+        using StoreKey key = Key("sessions");
+        ConversionResult toEncrypted = SqlCipherConversion.Encrypt(plain, encrypted, key);
+        Assert.True(SqlCipherDatabase.IsEncrypted(encrypted));
+        AssertAbsent(encrypted);
+        Assert.True(toEncrypted.Rows >= 4);
+
+        string decrypted = File("decrypted.db");
+        ConversionResult toPlain = SqlCipherConversion.Decrypt(encrypted, key, decrypted);
+        Assert.Equal(toEncrypted, toPlain);
+        Assert.False(SqlCipherDatabase.IsEncrypted(decrypted));
+        using SqliteConnection check = SqlCipherDatabase.OpenPlain(decrypted, pooling: false);
+        Assert.Equal(7L, Scalar(check, "PRAGMA user_version;"));
+        Assert.Equal("wal", Scalar(check, "PRAGMA journal_mode;"));
+        Assert.Equal(Secret, Scalar(check, "SELECT body FROM docs WHERE docs MATCH 'harbor';"));
+    }
+
+    [Fact]
+    public void ConversionRefusesAnExistingTarget()
+    {
+        string plain = File("plain.db");
+        using (SqliteConnection connection = SqlCipherDatabase.OpenPlain(plain, pooling: false))
+            Execute(connection, "CREATE TABLE t (x);");
+        string target = File("target.db");
+        System.IO.File.WriteAllText(target, "existing");
+        using StoreKey key = Key("sessions");
+        Assert.Throws<IOException>(() => SqlCipherConversion.Encrypt(plain, target, key));
+        Assert.Equal("existing", System.IO.File.ReadAllText(target));
+    }
+
+    public void Dispose()
+    {
+        root.Dispose();
+        SqliteConnection.ClearAllPools();
+        try { Directory.Delete(folder, recursive: true); }
+        catch (IOException) { }
+    }
+
+    private string CreateEncrypted(string storeId)
+    {
+        string path = File(storeId + ".db");
+        using StoreKey key = Key(storeId);
+        using SqlCipherDatabase database = new(path, key, pooling: false);
+        using SqliteConnection connection = database.Open();
+        Execute(connection, "CREATE TABLE messages (id INTEGER PRIMARY KEY, body TEXT);");
+        Insert(connection, Secret);
+        return path;
+    }
+
+    private StoreKey Key(string storeId) => root.DeriveStoreKey("agent-ds", StoreKind.Database, storeId);
+
+    private string File(string name) => Path.Combine(folder, name);
+
+    private static byte[] Bytes(StoreKey key)
+    {
+        byte[] bytes = new byte[StoreKey.Length];
+        key.CopyTo(bytes);
+        return bytes;
+    }
+
+    private static void AssertAbsent(string path)
+    {
+        if (!System.IO.File.Exists(path)) return;
+        byte[] content;
+        using (FileStream stream = new(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete))
+        {
+            content = new byte[stream.Length];
+            stream.ReadExactly(content);
+        }
+        Assert.Equal(-1, content.AsSpan().IndexOf(Encoding.UTF8.GetBytes("lighthouse")));
+    }
+
+    private static void Insert(SqliteConnection connection, string body)
+    {
+        using SqliteCommand command = connection.CreateCommand();
+        command.CommandText = "INSERT INTO messages (body) VALUES ($body);";
+        command.Parameters.AddWithValue("$body", body);
+        command.ExecuteNonQuery();
+    }
+
+    private static void Execute(SqliteConnection connection, string sql)
+    {
+        using SqliteCommand command = connection.CreateCommand();
+        command.CommandText = sql;
+        command.ExecuteNonQuery();
+    }
+
+    private static object? Scalar(SqliteConnection connection, string sql)
+    {
+        using SqliteCommand command = connection.CreateCommand();
+        command.CommandText = sql;
+        return command.ExecuteScalar();
+    }
+}

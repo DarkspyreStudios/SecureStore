@@ -35,10 +35,15 @@ those differences:
 SecureStore stores secrets only. Use `Darkspyre.Persistence` for ordinary application files and
 blobs.
 
+This repository also builds `Darkspyre.Encryption`, which encrypts application data at rest: it
+derives per-store keys from a vault root key, seals files in an authenticated envelope, and opens,
+locks and converts SQLCipher databases. See [src/Encryption/README.md](src/Encryption/README.md).
+
 ## Local source consumption
 
 `eng/SourceReferences.targets` replaces a consumer's `Darkspyre.SecureStore` package reference
-with the `src/SecureStore/SecureStore.csproj` project in this worktree. The consumer imports it
+with the `src/SecureStore/SecureStore.csproj` project in this worktree, and its
+`Darkspyre.Encryption` package reference with `src/Encryption/Encryption.csproj`. The consumer imports it
 after declaring package references. Reference metadata is retained; runtime exclusions disable
 output copying, and compile exclusions disable the assembly reference.
 
