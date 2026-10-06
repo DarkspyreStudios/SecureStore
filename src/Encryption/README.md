@@ -20,15 +20,15 @@ Encryption at rest for Darkspyre applications. The library holds a vault root ke
 
 Call `SqlCipher.Initialize(libraryPath)` once, before anything in the process opens a SQLite connection. It installs the SQLCipher build at that path as the SQLite provider for Microsoft.Data.Sqlite and EF Core. Every keyed open and every conversion checks `PRAGMA cipher_version` on its connection, so a plain SQLite build never silently ignores a key.
 
-`SqlCipherDatabase` describes one database file and its store key:
+`SqlCipherDatabase` describes one database file and its store key. The key never appears in a connection string or in SQL text:
 
-- `Open()` returns a connection keyed with the raw 256-bit store key. A wrong key reports `KeyRejected`.
-- `ConnectionString` carries the key through the `Password` keyword, for EF Core. It contains the key and must never be logged, persisted or shown.
-- `Lock()` clears the connection pool, so idle native connections close and release their cipher contexts.
+- `Open()` opens a connection with a keyless connection string, then passes the raw 256-bit key to SQLCipher through the native `sqlite3_key` call before any statement runs. A wrong key reports `KeyRejected`. EF Core receives the open connection object.
+- Connections are never pooled, so a keyed native connection is never handed to a caller that opens the same path without the key. A raw key needs no key stretching, so an unpooled open is cheap.
+- `Lock()` closes every connection the instance opened that is still open, releasing their cipher contexts. `Dispose()` locks and zeroes the instance's copy of the key.
 - `SqlCipherDatabase.OpenPlain(path)` opens a plaintext database and reports `KeyRequired` for an encrypted file.
 - `SqlCipherDatabase.IsEncrypted(path)` reports whether a file is not plaintext SQLite.
 
-`SqlCipherConversion.Encrypt` and `SqlCipherConversion.Decrypt` write a converted copy to a new path with `sqlcipher_export`. The copy keeps `user_version` and WAL mode. Before returning, the conversion compares the schema, row counts and a SHA-256 digest of every row, including FTS5 shadow tables. A mismatch deletes the copy and reports `ConversionMismatch`. The source is never changed; the caller replaces it.
+`SqlCipherConversion.Encrypt` and `SqlCipherConversion.Decrypt` write a converted copy to a new path with `sqlcipher_export`, passing the key as a bound blob parameter. The copy keeps `user_version` and WAL mode. Before returning, the conversion compares the schema, row counts and a SHA-256 digest of every row, including FTS5 shadow tables. A mismatch deletes the copy and reports `ConversionMismatch`. The source is never changed; the caller replaces it.
 
 ## Native library
 

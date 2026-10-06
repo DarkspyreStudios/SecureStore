@@ -76,6 +76,44 @@ public sealed class SqlCipherTests : IDisposable
     }
 
     [Fact]
+    public void KeyIsNotInTheConnectionString()
+    {
+        string path = CreateEncrypted("sessions");
+        using StoreKey key = Key("sessions");
+        string hex = Convert.ToHexString(Bytes(key));
+        using SqlCipherDatabase database = new(path, key);
+        using SqliteConnection connection = database.Open();
+        Assert.DoesNotContain(hex, connection.ConnectionString, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("Password", connection.ConnectionString, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void KeylessOpenOfTheSamePathGetsNoKeyedConnection()
+    {
+        string path = CreateEncrypted("sessions");
+        using StoreKey key = Key("sessions");
+        using SqlCipherDatabase database = new(path, key);
+        using (SqliteConnection connection = database.Open()) Assert.Equal(Secret, Scalar(connection, "SELECT body FROM messages;"));
+        using SqliteConnection keyless = new(new SqliteConnectionStringBuilder { DataSource = path }.ToString());
+        keyless.Open();
+        Assert.Throws<SqliteException>(() => Scalar(keyless, "SELECT body FROM messages;"));
+    }
+
+    [Fact]
+    public void LockClosesOpenConnectionsAndDisposeRefusesNewOnes()
+    {
+        string path = CreateEncrypted("sessions");
+        using StoreKey key = Key("sessions");
+        SqlCipherDatabase database = new(path, key);
+        using SqliteConnection held = database.Open();
+        database.Lock();
+        Assert.Equal(System.Data.ConnectionState.Closed, held.State);
+        using (SqliteConnection reopened = database.Open()) Assert.Equal(Secret, Scalar(reopened, "SELECT body FROM messages;"));
+        database.Dispose();
+        Assert.Throws<ObjectDisposedException>(() => database.Open());
+    }
+
+    [Fact]
     public void LockedDatabaseReopensWithItsKey()
     {
         string path = CreateEncrypted("sessions");
@@ -91,13 +129,13 @@ public sealed class SqlCipherTests : IDisposable
     {
         string path = File("index.db");
         using StoreKey key = Key("memory.index");
-        using (SqlCipherDatabase database = new(path, key, pooling: false))
+        using (SqlCipherDatabase database = new(path, key))
         using (SqliteConnection connection = database.Open())
         {
             Execute(connection, "CREATE VIRTUAL TABLE docs USING fts5(body);");
             Execute(connection, $"INSERT INTO docs (body) VALUES ('{Secret}'), ('nothing relevant here');");
         }
-        using (SqlCipherDatabase database = new(path, key, pooling: false))
+        using (SqlCipherDatabase database = new(path, key))
         using (SqliteConnection connection = database.Open())
             Assert.Equal(Secret, Scalar(connection, "SELECT body FROM docs WHERE docs MATCH 'lighthouse';"));
         AssertAbsent(path);
@@ -158,7 +196,7 @@ public sealed class SqlCipherTests : IDisposable
     {
         string path = File(storeId + ".db");
         using StoreKey key = Key(storeId);
-        using SqlCipherDatabase database = new(path, key, pooling: false);
+        using SqlCipherDatabase database = new(path, key);
         using SqliteConnection connection = database.Open();
         Execute(connection, "CREATE TABLE messages (id INTEGER PRIMARY KEY, body TEXT);");
         Insert(connection, Secret);

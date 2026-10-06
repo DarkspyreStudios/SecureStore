@@ -1,44 +1,51 @@
+using System.Collections.Concurrent;
+using System.Data;
+using System.Security.Cryptography;
+using System.Text;
 using Microsoft.Data.Sqlite;
+using SQLitePCL;
 
 namespace Darkspyre.Encryption;
 
 /// <summary>
-/// One SQLCipher database file and the store key that opens it. It creates keyed connections and locks the
-/// database by clearing their pool.
+/// One SQLCipher database file and the store key that opens it. It opens keyed connections and locks the database
+/// by closing them.
 /// </summary>
 /// <remarks>
 /// <para>
-/// The key is applied as a raw 256-bit SQLCipher key through the connection string's <c>Password</c> keyword, so
-/// Microsoft.Data.Sqlite runs <c>PRAGMA key</c> once on each new native connection, before any other statement. EF
-/// Core and other callers that take a connection string use <see cref="ConnectionString"/> unchanged.
+/// The key never appears in a connection string or in SQL text. <see cref="Open"/> opens a connection with a keyless
+/// connection string, then passes the raw 256-bit key to SQLCipher through the native <c>sqlite3_key</c> call before
+/// any statement runs. EF Core and other callers receive the open <see cref="SqliteConnection"/>, not a string.
 /// </para>
 /// <para>
-/// <see cref="ConnectionString"/> contains the key. It must never be logged, persisted or shown.
+/// Connections are never pooled. A pooled native connection keeps its key, and Microsoft.Data.Sqlite would hand it
+/// to any caller that opens the same keyless connection string. Opening a connection with a raw key does no key
+/// stretching, so an unpooled open is cheap. The instance keeps its own copy of the key until <see cref="Dispose"/>.
 /// </para>
 /// </remarks>
 public sealed class SqlCipherDatabase : IDisposable
 {
+    private const int NotADatabase = 26;
     private static readonly byte[] PlainHeader = "SQLite format 3\0"u8.ToArray();
+
+    private readonly string connectionString;
+    private readonly byte[] keyMaterial;
+    private readonly ConcurrentDictionary<SqliteConnection, byte> open = new();
+    private readonly Lock gate = new();
     private bool disposed;
 
     /// <summary>Describes a keyed database.</summary>
     /// <param name="path">The database file.</param>
-    /// <param name="key">The store key. The instance reads it now and does not keep it.</param>
+    /// <param name="key">The store key. The instance copies it and zeroes the copy on <see cref="Dispose"/>.</param>
     /// <param name="mode">How connections open the file.</param>
-    /// <param name="pooling">Whether connections are pooled. <see cref="Lock"/> clears the pool.</param>
-    public SqlCipherDatabase(string path, StoreKey key, SqliteOpenMode mode = SqliteOpenMode.ReadWriteCreate, bool pooling = true)
+    public SqlCipherDatabase(string path, StoreKey key, SqliteOpenMode mode = SqliteOpenMode.ReadWriteCreate)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
         ArgumentNullException.ThrowIfNull(key);
         Path = System.IO.Path.GetFullPath(path);
         StoreId = key.StoreId;
-        ConnectionString = new SqliteConnectionStringBuilder
-        {
-            DataSource = Path,
-            Mode = mode,
-            Pooling = pooling,
-            Password = RawKey(key),
-        }.ToString();
+        connectionString = new SqliteConnectionStringBuilder { DataSource = Path, Mode = mode, Pooling = false }.ToString();
+        keyMaterial = RawKeyBytes(key);
     }
 
     /// <summary>The database file.</summary>
@@ -46,9 +53,6 @@ public sealed class SqlCipherDatabase : IDisposable
 
     /// <summary>The store id of the key.</summary>
     public string StoreId { get; }
-
-    /// <summary>The keyed connection string. It contains the key: never log, persist or show it.</summary>
-    public string ConnectionString { get; }
 
     /// <summary>
     /// Whether the file at <paramref name="path"/> exists and is not a plaintext SQLite database. An empty or missing
@@ -76,20 +80,28 @@ public sealed class SqlCipherDatabase : IDisposable
         return connection;
     }
 
-    /// <summary>Opens a keyed connection and checks that the key opens the file.</summary>
+    /// <summary>Opens a keyed connection and checks that the key opens the file. The caller disposes it.</summary>
     /// <exception cref="EncryptionException">
     /// The key does not open the file (<see cref="EncryptionFailure.KeyRejected"/>), or SQLCipher is not serving the
     /// connection (<see cref="EncryptionFailure.SqlCipherUnavailable"/>).
     /// </exception>
+    /// <exception cref="ObjectDisposedException">The database was locked by <see cref="Dispose"/>.</exception>
     public SqliteConnection Open()
     {
-        ObjectDisposedException.ThrowIf(disposed, this);
-        SqliteConnection connection = new(ConnectionString);
+        SqliteConnection connection = new(connectionString);
         try
         {
             connection.Open();
             SqlCipher.RequireCipher(connection, StoreId);
+            lock (gate)
+            {
+                ObjectDisposedException.ThrowIf(disposed, this);
+                int result = raw.sqlite3_key(connection.Handle, keyMaterial);
+                if (result != raw.SQLITE_OK)
+                    throw new EncryptionException(EncryptionFailure.SqlCipherUnavailable, $"SQLCipher refused the key for store '{StoreId}' (result {result}).");
+            }
             Verify(connection, StoreId);
+            Track(connection);
             return connection;
         }
         catch (SqliteException error) when (error.SqliteErrorCode == NotADatabase)
@@ -105,20 +117,28 @@ public sealed class SqlCipherDatabase : IDisposable
     }
 
     /// <summary>
-    /// Locks the database: clears the connection pool so idle native connections close and release their cipher
-    /// contexts. Connections still open close when they are disposed and are not returned to the pool.
+    /// Locks the database: closes every connection this instance opened that is still open, which releases their
+    /// native cipher contexts. A caller still holding one sees it closed. New opens still work until
+    /// <see cref="Dispose"/>.
     /// </summary>
     public void Lock()
     {
-        using SqliteConnection connection = new(ConnectionString);
-        SqliteConnection.ClearPool(connection);
+        foreach (SqliteConnection connection in open.Keys)
+        {
+            open.TryRemove(connection, out _);
+            connection.Close();
+        }
     }
 
-    /// <summary>Locks the database.</summary>
+    /// <summary>Locks the database and zeroes the key copy. Later calls to <see cref="Open"/> fail.</summary>
     public void Dispose()
     {
-        if (disposed) return;
-        disposed = true;
+        lock (gate)
+        {
+            if (disposed) return;
+            disposed = true;
+            CryptographicOperations.ZeroMemory(keyMaterial);
+        }
         Lock();
     }
 
@@ -137,11 +157,18 @@ public sealed class SqlCipherDatabase : IDisposable
         }
     }
 
-    private const int NotADatabase = 26;
+    /// <summary>The SQLCipher raw key form <c>x'&lt;64 hex&gt;'</c> as ASCII bytes. The caller zeroes them.</summary>
+    internal static byte[] RawKeyBytes(StoreKey key) => Encoding.ASCII.GetBytes("x'" + Convert.ToHexString(key.Bytes) + "'");
+
+    private void Track(SqliteConnection connection)
+    {
+        open[connection] = 0;
+        connection.StateChange += (_, change) =>
+        {
+            if (change.CurrentState == ConnectionState.Closed) open.TryRemove(connection, out byte _);
+        };
+    }
 
     private static EncryptionException Rejected(string storeId, Exception error) =>
         new(EncryptionFailure.KeyRejected, $"The key for store '{storeId}' does not open its database.", error);
-
-    /// <summary>The SQLCipher raw key form, <c>x'&lt;64 hex&gt;'</c>.</summary>
-    internal static string RawKey(StoreKey key) => "x'" + Convert.ToHexString(key.Bytes) + "'";
 }

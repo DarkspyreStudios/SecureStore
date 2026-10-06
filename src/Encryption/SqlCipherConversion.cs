@@ -40,8 +40,16 @@ public static class SqlCipherConversion
         // ATTACH inherits the main connection's open flags, so the source opens with create permission.
         using SqliteConnection source = SqlCipherDatabase.OpenPlain(plainPath, SqliteOpenMode.ReadWriteCreate, pooling: false);
         SqlCipher.RequireCipher(source, key.StoreId);
-        Export(source, encryptedPath, "encrypted", SqlCipherDatabase.RawKey(key));
-        using SqlCipherDatabase target = new(encryptedPath, key, SqliteOpenMode.ReadWrite, pooling: false);
+        byte[] keyMaterial = SqlCipherDatabase.RawKeyBytes(key);
+        try
+        {
+            Export(source, encryptedPath, "encrypted", keyMaterial);
+        }
+        finally
+        {
+            CryptographicOperations.ZeroMemory(keyMaterial);
+        }
+        using SqlCipherDatabase target = new(encryptedPath, key, SqliteOpenMode.ReadWrite);
         using SqliteConnection copy = target.Open();
         return Compare(source, copy, encryptedPath, key.StoreId);
     }
@@ -54,9 +62,9 @@ public static class SqlCipherConversion
         ArgumentNullException.ThrowIfNull(key);
         RequireSource(encryptedPath);
         RequireFreeTarget(plainPath);
-        using SqlCipherDatabase sourceDatabase = new(encryptedPath, key, SqliteOpenMode.ReadWriteCreate, pooling: false);
+        using SqlCipherDatabase sourceDatabase = new(encryptedPath, key, SqliteOpenMode.ReadWriteCreate);
         using SqliteConnection source = sourceDatabase.Open();
-        Export(source, plainPath, "plaintext", "");
+        Export(source, plainPath, "plaintext", []);
         using SqliteConnection copy = SqlCipherDatabase.OpenPlain(plainPath, SqliteOpenMode.ReadWrite, pooling: false);
         return Compare(source, copy, plainPath, key.StoreId);
     }
@@ -98,7 +106,7 @@ public static class SqlCipherConversion
         return new ConversionResult(tables, rows, Convert.ToHexStringLower(hash.GetHashAndReset()));
     }
 
-    private static void Export(SqliteConnection source, string targetPath, string alias, string key)
+    private static void Export(SqliteConnection source, string targetPath, string alias, byte[] key)
     {
         long userVersion = Scalar(source, "PRAGMA main.user_version;");
         bool wal = string.Equals(Text(source, "PRAGMA main.journal_mode;"), "wal", StringComparison.OrdinalIgnoreCase);
@@ -108,7 +116,8 @@ public static class SqlCipherConversion
             {
                 attach.CommandText = $"ATTACH DATABASE $path AS {alias} KEY $key;";
                 attach.Parameters.AddWithValue("$path", Path.GetFullPath(targetPath));
-                attach.Parameters.AddWithValue("$key", key);
+                // A blob parameter keeps the key out of the SQL text. An empty blob attaches a plaintext database.
+                attach.Parameters.Add("$key", SqliteType.Blob).Value = key;
                 attach.ExecuteNonQuery();
             }
             Execute(source, $"SELECT sqlcipher_export('{alias}');");
