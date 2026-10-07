@@ -11,6 +11,12 @@ public enum StoreKind
 
     /// <summary>A file sealed with <see cref="Envelope"/>, such as a settings file or a persisted asset.</summary>
     Asset,
+
+    /// <summary>
+    /// A whole plugin's key, with the plugin id as the store id. The plugin uses it for every store it owns, databases
+    /// and files alike.
+    /// </summary>
+    Plugin,
 }
 
 /// <summary>
@@ -20,7 +26,7 @@ public enum StoreKind
 /// <remarks>
 /// The fingerprint identifies a root without revealing it: HMAC-SHA256 keyed by the root over the fixed label
 /// <c>darkspyre-vault-fingerprint-v1</c>, as lowercase hex. Store keys use HKDF-SHA256 with the info label
-/// <c>darkspyre-store-key-v1|&lt;application&gt;|&lt;kind&gt;|&lt;store id&gt;</c>. A store id must be stable across
+/// <c>darkspyre-store-key-v1|&lt;application&gt;|&lt;database, asset or plugin&gt;|&lt;store id&gt;</c>. A store id must be stable across
 /// moves and restarts; a file path is never a store id.
 /// </remarks>
 public sealed class VaultKey : IDisposable
@@ -84,6 +90,14 @@ public sealed class VaultKey : IDisposable
         root.CopyTo(destination);
     }
 
+    private static string KindLabel(StoreKind kind) => kind switch
+    {
+        StoreKind.Database => "database",
+        StoreKind.Asset => "asset",
+        StoreKind.Plugin => "plugin",
+        _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, "Unknown store kind."),
+    };
+
     /// <summary>Derives the key for one store.</summary>
     /// <param name="application">The application that owns the store, such as <c>agent-ds</c>.</param>
     /// <param name="kind">What the store is.</param>
@@ -96,7 +110,7 @@ public sealed class VaultKey : IDisposable
         if (application.Contains('|', StringComparison.Ordinal))
             throw new ArgumentException("An application name cannot contain '|'.", nameof(application));
         byte[] info = Encoding.UTF8.GetBytes(
-            $"darkspyre-store-key-v{DerivationVersion}|{application}|{(kind == StoreKind.Database ? "database" : "asset")}|{storeId}");
+            $"darkspyre-store-key-v{DerivationVersion}|{application}|{KindLabel(kind)}|{storeId}");
         byte[] subkey = HKDF.DeriveKey(HashAlgorithmName.SHA256, root, StoreKey.Length, salt: [], info);
         try
         {

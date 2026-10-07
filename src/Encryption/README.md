@@ -8,7 +8,7 @@ Encryption at rest for Darkspyre applications. The library holds a vault root ke
 
 - `VaultKey.Generate()` creates a random root. `VaultKey.FromBytes(root)` copies one from a broker reply or a key file.
 - `Fingerprint` identifies the root without revealing it: HMAC-SHA256 keyed by the root over `darkspyre-vault-fingerprint-v1`, as lowercase hex. `VaultKey.ComputeFingerprint` computes it for bytes held elsewhere.
-- `DeriveStoreKey(application, kind, storeId)` returns a `StoreKey` through HKDF-SHA256 with the info label `darkspyre-store-key-v1|<application>|<database or asset>|<store id>`. A store id is stable across moves and restarts. A file path is never a store id.
+- `DeriveStoreKey(application, kind, storeId)` returns a `StoreKey` through HKDF-SHA256 with the info label `darkspyre-store-key-v1|<application>|<database, asset or plugin>|<store id>`. A store id is stable across moves and restarts. A file path is never a store id. A `Plugin` key uses the plugin id as its store id and covers every store that plugin owns.
 
 `StoreKey` holds one 32-byte store key, its store id and the root key version. A process that never holds the root, such as a service that receives keys from its host, creates one with `StoreKey.FromBytes`. `CopyTo` copies the bytes out for delivery; the caller clears its buffer.
 

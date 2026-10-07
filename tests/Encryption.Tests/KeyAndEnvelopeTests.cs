@@ -35,6 +35,8 @@ public sealed class KeyAndEnvelopeTests
             Hex(key.DeriveStoreKey("agent-ds", StoreKind.Database, "memory.catalog")),
             Hex(key.DeriveStoreKey("agent-ds", StoreKind.Asset, "sessions")),
             Hex(key.DeriveStoreKey("tickets", StoreKind.Database, "sessions")),
+            Hex(key.DeriveStoreKey("agent-ds", StoreKind.Plugin, "sessions")),
+            Hex(key.DeriveStoreKey("agent-ds", StoreKind.Plugin, "com.darkspyrestudios.tickets")),
         ];
         Assert.Equal(keys.Length, keys.Distinct().Count());
     }
