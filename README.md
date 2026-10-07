@@ -327,6 +327,9 @@ file store is weaker than a vault: the secrets are only as private as that key a
 on the directory around the file. On Unix the store restricts the file to `0600` and its directory
 to `0700`.
 
+The file stores credential names and protected Base64 values in a JSON string dictionary. Its
+codec uses generated metadata, so reads and writes do not depend on reflection-based serialization.
+
 `AesGcmSecretProtector` takes a 16, 24, or 32 byte key. An application that already has a key
 management story implements `ISecretProtector` instead.
 

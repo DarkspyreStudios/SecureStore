@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using SecureStore.Internal;
 
 namespace SecureStore;
@@ -13,8 +14,6 @@ namespace SecureStore;
 /// </summary>
 public sealed class EncryptedFileCredentialStore : ICredentialStore, IDisposable
 {
-    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
-
     private readonly ISecretProtector _protector;
     private readonly string _filePath;
     private readonly SemaphoreSlim _gate = new(1, 1);
@@ -111,7 +110,7 @@ public sealed class EncryptedFileCredentialStore : ICredentialStore, IDisposable
 
         await using FileStream stream = File.OpenRead(_filePath);
         Dictionary<string, string>? entries = await JsonSerializer
-            .DeserializeAsync<Dictionary<string, string>>(stream, JsonOptions, cancellationToken)
+            .DeserializeAsync(stream, EncryptedFileCredentialJsonContext.Default.Entries, cancellationToken)
             .ConfigureAwait(false);
         return entries is null
             ? new Dictionary<string, string>(StringComparer.Ordinal)
@@ -133,7 +132,7 @@ public sealed class EncryptedFileCredentialStore : ICredentialStore, IDisposable
         await using (FileStream stream = File.Create(temporaryPath))
         {
             RestrictToOwner(temporaryPath, isDirectory: false);
-            await JsonSerializer.SerializeAsync(stream, entries, JsonOptions, cancellationToken).ConfigureAwait(false);
+            await JsonSerializer.SerializeAsync(stream, entries, EncryptedFileCredentialJsonContext.Default.Entries, cancellationToken).ConfigureAwait(false);
         }
 
         File.Move(temporaryPath, _filePath, overwrite: true);
@@ -153,3 +152,7 @@ public sealed class EncryptedFileCredentialStore : ICredentialStore, IDisposable
         File.SetUnixFileMode(path, mode);
     }
 }
+
+[JsonSourceGenerationOptions(JsonSerializerDefaults.Web, GenerationMode = JsonSourceGenerationMode.Metadata)]
+[JsonSerializable(typeof(Dictionary<string, string>), TypeInfoPropertyName = "Entries")]
+internal sealed partial class EncryptedFileCredentialJsonContext : JsonSerializerContext;
