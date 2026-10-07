@@ -27,6 +27,9 @@ public sealed record ConversionResult(int Tables, long Rows, string ContentDiges
 /// </remarks>
 public static class SqlCipherConversion
 {
+    /// <summary>The suffix of the converted copy an in-place conversion writes beside its source.</summary>
+    public const string ConvertingSuffix = ".converting";
+
     private static readonly string[] Companions = ["-wal", "-shm", "-journal"];
 
     /// <summary>Writes an encrypted copy of the plaintext database at <paramref name="plainPath"/>.</summary>
@@ -67,6 +70,79 @@ public static class SqlCipherConversion
         Export(source, plainPath, "plaintext", []);
         using SqliteConnection copy = SqlCipherDatabase.OpenPlain(plainPath, SqliteOpenMode.ReadWrite, pooling: false);
         return Compare(source, copy, plainPath, key.StoreId);
+    }
+
+    /// <summary>
+    /// Encrypts the plaintext database at <paramref name="path"/> in place, resumably. Returns what was converted, or null
+    /// when the file is already encrypted or missing. Nothing else may have the database open.
+    /// </summary>
+    /// <remarks>
+    /// The source's write-ahead log is checkpointed into it first, so the file alone holds every committed change. The
+    /// encrypted copy is written beside it as <c>&lt;path&gt;.converting</c> and verified, the source's companion files
+    /// are removed, and the copy replaces the source in one rename. After a crash the source is either unchanged or
+    /// already replaced; running again finishes the work and discards a partial copy.
+    /// </remarks>
+    public static ConversionResult? EncryptInPlace(string path, StoreKey key)
+    {
+        ArgumentNullException.ThrowIfNull(key);
+        string converting = path + ConvertingSuffix;
+        if (!File.Exists(path) || SqlCipherDatabase.IsEncrypted(path))
+        {
+            DeleteSet(converting);
+            return null;
+        }
+
+        DeleteSet(converting);
+        using (SqliteConnection source = SqlCipherDatabase.OpenPlain(path, SqliteOpenMode.ReadWrite, pooling: false)) Checkpoint(source);
+        ConversionResult result = Encrypt(path, converting, key);
+        Replace(converting, path);
+        return result;
+    }
+
+    /// <summary>
+    /// Decrypts the encrypted database at <paramref name="path"/> in place, resumably. Returns what was converted, or null
+    /// when the file is already plaintext or missing. Nothing else may have the database open.
+    /// </summary>
+    /// <remarks>The same steps as <see cref="EncryptInPlace"/>, in the other direction.</remarks>
+    public static ConversionResult? DecryptInPlace(string path, StoreKey key)
+    {
+        ArgumentNullException.ThrowIfNull(key);
+        string converting = path + ConvertingSuffix;
+        if (!File.Exists(path) || !SqlCipherDatabase.IsEncrypted(path))
+        {
+            DeleteSet(converting);
+            return null;
+        }
+
+        DeleteSet(converting);
+        using (SqlCipherDatabase database = new(path, key, SqliteOpenMode.ReadWrite))
+        using (SqliteConnection source = database.Open())
+        {
+            Checkpoint(source);
+        }
+
+        ConversionResult result = Decrypt(path, key, converting);
+        Replace(converting, path);
+        return result;
+    }
+
+    private static void Checkpoint(SqliteConnection connection)
+    {
+        if (string.Equals(Text(connection, "PRAGMA main.journal_mode;"), "wal", StringComparison.OrdinalIgnoreCase))
+            Text(connection, "PRAGMA main.wal_checkpoint(TRUNCATE);");
+    }
+
+    /// <summary>Removes the source's companions and the copy's, then renames the verified copy over the source.</summary>
+    private static void Replace(string converted, string path)
+    {
+        SqliteConnection.ClearAllPools();
+        foreach (string suffix in Companions)
+        {
+            File.Delete(path + suffix);
+            File.Delete(converted + suffix);
+        }
+
+        File.Move(converted, path, overwrite: true);
     }
 
     /// <summary>Computes the verification digest of one open database.</summary>

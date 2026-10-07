@@ -27,8 +27,11 @@ Call `SqlCipher.Initialize(libraryPath)` once, before anything in the process op
 - `Lock()` closes every connection the instance opened that is still open, releasing their cipher contexts. `Dispose()` locks and zeroes the instance's copy of the key.
 - `SqlCipherDatabase.OpenPlain(path)` opens a plaintext database and reports `KeyRequired` for an encrypted file.
 - `SqlCipherDatabase.IsEncrypted(path)` reports whether a file is not plaintext SQLite.
+- `SqlCipherDatabase.ApplyKey(connection, key)` keys a connection another component opened, such as an EF Core connection, before it reads the database. The connection string must carry no pragmas, because they run before the key. A pooled connection keeps its key when it returns to the pool, so a caller that pools keyed connections must key every native connection it opens for that path and nothing else may open the path without the key.
 
 `SqlCipherConversion.Encrypt` and `SqlCipherConversion.Decrypt` write a converted copy to a new path with `sqlcipher_export`, passing the key as a bound blob parameter. The copy keeps `user_version` and WAL mode. Before returning, the conversion compares the schema, row counts and a SHA-256 digest of every row, including FTS5 shadow tables. A mismatch deletes the copy and reports `ConversionMismatch`. The source is never changed; the caller replaces it.
+
+`SqlCipherConversion.EncryptInPlace` and `SqlCipherConversion.DecryptInPlace` convert one closed database file in place. Each checkpoints the source's write-ahead log, writes the verified copy to `<path>.converting`, removes the source's `-wal`, `-shm` and `-journal` files, and renames the copy over the source. A file already in the target form, or a missing file, returns null. A `.converting` set left by an interrupted run is deleted first, so running the conversion again after a crash finishes it.
 
 ## Native library
 

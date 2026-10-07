@@ -184,6 +184,92 @@ public sealed class SqlCipherTests : IDisposable
         Assert.Equal("existing", System.IO.File.ReadAllText(target));
     }
 
+    [Fact]
+    public void ApplyKeyKeysAConnectionOpenedElsewhereAndThePoolKeepsIt()
+    {
+        string path = CreateEncrypted("sessions");
+        string connectionString = new SqliteConnectionStringBuilder { DataSource = path, Pooling = true }.ToString();
+        using StoreKey key = Key("sessions");
+        using (SqliteConnection connection = new(connectionString))
+        {
+            connection.Open();
+            SqlCipherDatabase.ApplyKey(connection, key);
+            Assert.Equal(Secret, Scalar(connection, "SELECT body FROM messages;"));
+        }
+
+        using SqliteConnection pooled = new(connectionString);
+        pooled.Open();
+        Assert.Equal(Secret, Scalar(pooled, "SELECT body FROM messages;"));
+    }
+
+    [Fact]
+    public void ApplyKeyWithTheWrongKeyReportsKeyRejected()
+    {
+        string path = CreateEncrypted("sessions");
+        using StoreKey wrong = Key("memory");
+        using SqliteConnection connection = new(new SqliteConnectionStringBuilder { DataSource = path, Pooling = false }.ToString());
+        connection.Open();
+        EncryptionException error = Assert.Throws<EncryptionException>(() => SqlCipherDatabase.ApplyKey(connection, wrong));
+        Assert.Equal(EncryptionFailure.KeyRejected, error.Failure);
+    }
+
+    [Fact]
+    public void InPlaceConversionRoundTripKeepsContentAndLeavesNoCopy()
+    {
+        string path = File("live.db");
+        using (SqliteConnection connection = SqlCipherDatabase.OpenPlain(path, pooling: false))
+        {
+            Execute(connection, "PRAGMA journal_mode = WAL; PRAGMA user_version = 3; CREATE TABLE messages (id INTEGER PRIMARY KEY, body TEXT);");
+            Insert(connection, Secret);
+        }
+
+        using StoreKey key = Key("sessions");
+        ConversionResult? encrypted = SqlCipherConversion.EncryptInPlace(path, key);
+        Assert.NotNull(encrypted);
+        Assert.True(SqlCipherDatabase.IsEncrypted(path));
+        AssertAbsent(path);
+        AssertNoCopy(path);
+        Assert.Null(SqlCipherConversion.EncryptInPlace(path, key));
+
+        ConversionResult? decrypted = SqlCipherConversion.DecryptInPlace(path, key);
+        Assert.Equal(encrypted, decrypted);
+        Assert.False(SqlCipherDatabase.IsEncrypted(path));
+        AssertNoCopy(path);
+        Assert.Null(SqlCipherConversion.DecryptInPlace(path, key));
+        using SqliteConnection check = SqlCipherDatabase.OpenPlain(path, pooling: false);
+        Assert.Equal(3L, Scalar(check, "PRAGMA user_version;"));
+        Assert.Equal(Secret, Scalar(check, "SELECT body FROM messages;"));
+    }
+
+    [Fact]
+    public void InPlaceConversionDiscardsACopyLeftByAnInterruptedRun()
+    {
+        string path = File("live.db");
+        using (SqliteConnection connection = SqlCipherDatabase.OpenPlain(path, pooling: false))
+        {
+            Execute(connection, "CREATE TABLE messages (id INTEGER PRIMARY KEY, body TEXT);");
+            Insert(connection, Secret);
+        }
+        System.IO.File.WriteAllText(path + SqlCipherConversion.ConvertingSuffix, "partial");
+        System.IO.File.WriteAllText(path + SqlCipherConversion.ConvertingSuffix + "-wal", "partial");
+
+        using StoreKey key = Key("sessions");
+        Assert.NotNull(SqlCipherConversion.EncryptInPlace(path, key));
+        Assert.True(SqlCipherDatabase.IsEncrypted(path));
+        AssertNoCopy(path);
+    }
+
+    [Fact]
+    public void InPlaceDecryptionWithTheWrongKeyLeavesTheFileEncrypted()
+    {
+        string path = CreateEncrypted("sessions");
+        using StoreKey wrong = Key("memory");
+        EncryptionException error = Assert.Throws<EncryptionException>(() => SqlCipherConversion.DecryptInPlace(path, wrong));
+        Assert.Equal(EncryptionFailure.KeyRejected, error.Failure);
+        Assert.True(SqlCipherDatabase.IsEncrypted(path));
+        AssertNoCopy(path);
+    }
+
     public void Dispose()
     {
         root.Dispose();
@@ -224,6 +310,12 @@ public sealed class SqlCipherTests : IDisposable
             stream.ReadExactly(content);
         }
         Assert.Equal(-1, content.AsSpan().IndexOf(Encoding.UTF8.GetBytes("lighthouse")));
+    }
+
+    private static void AssertNoCopy(string path)
+    {
+        foreach (string suffix in new[] { "", "-wal", "-shm", "-journal" })
+            Assert.False(System.IO.File.Exists(path + SqlCipherConversion.ConvertingSuffix + suffix));
     }
 
     private static void Insert(SqliteConnection connection, string body)

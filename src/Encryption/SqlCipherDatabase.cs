@@ -117,6 +117,37 @@ public sealed class SqlCipherDatabase : IDisposable
     }
 
     /// <summary>
+    /// Keys a connection another component opened, such as EF Core, before it runs any statement. The connection must be
+    /// open, served by SQLCipher, and must not have read the database yet: open it without pragmas in its connection
+    /// string. Call it once per native connection; a pooled connection that comes back keeps its key.
+    /// </summary>
+    /// <exception cref="EncryptionException">
+    /// The key does not open the file (<see cref="EncryptionFailure.KeyRejected"/>), or SQLCipher is not serving the
+    /// connection (<see cref="EncryptionFailure.SqlCipherUnavailable"/>).
+    /// </exception>
+    public static void ApplyKey(SqliteConnection connection, StoreKey key)
+    {
+        ArgumentNullException.ThrowIfNull(connection);
+        ArgumentNullException.ThrowIfNull(key);
+        if (connection.State != ConnectionState.Open)
+            throw new InvalidOperationException("The connection must be open before it is keyed.");
+        SqlCipher.RequireCipher(connection, key.StoreId);
+        byte[] material = RawKeyBytes(key);
+        try
+        {
+            int result = raw.sqlite3_key(connection.Handle, material);
+            if (result != raw.SQLITE_OK)
+                throw new EncryptionException(EncryptionFailure.SqlCipherUnavailable, $"SQLCipher refused the key for store '{key.StoreId}' (result {result}).");
+        }
+        finally
+        {
+            CryptographicOperations.ZeroMemory(material);
+        }
+
+        Verify(connection, key.StoreId);
+    }
+
+    /// <summary>
     /// Locks the database: closes every connection this instance opened that is still open, which releases their
     /// native cipher contexts. A caller still holding one sees it closed. New opens still work until
     /// <see cref="Dispose"/>.
