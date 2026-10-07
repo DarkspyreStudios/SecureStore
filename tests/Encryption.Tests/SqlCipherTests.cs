@@ -270,6 +270,27 @@ public sealed class SqlCipherTests : IDisposable
         AssertNoCopy(path);
     }
 
+    [Fact]
+    public void BackupApiCopiesBetweenDatabasesWithTheSameKey()
+    {
+        string source = CreateEncrypted("sessions");
+        string copy = File("copy.db");
+        using StoreKey key = Key("sessions");
+        using (SqlCipherDatabase from = new(source, key))
+        using (SqlCipherDatabase to = new(copy, key))
+        using (SqliteConnection fromConnection = from.Open())
+        using (SqliteConnection toConnection = to.Open())
+        {
+            fromConnection.BackupDatabase(toConnection);
+        }
+
+        Assert.True(SqlCipherDatabase.IsEncrypted(copy));
+        AssertAbsent(copy);
+        using SqlCipherDatabase check = new(copy, key);
+        using SqliteConnection connection = check.Open();
+        Assert.Equal(Secret, Scalar(connection, "SELECT body FROM messages;"));
+    }
+
     public void Dispose()
     {
         root.Dispose();
