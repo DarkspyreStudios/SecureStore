@@ -32,7 +32,7 @@ those differences:
 - A missing secret reads as `null`. Deleting a missing secret succeeds.
 - A host with no vault fails loudly by default, or uses a fallback the application chooses.
 
-SecureStore stores secrets only. Use `Darkspyre.Persistence` for ordinary application files and
+SecureStore stores secrets only. Use `Darkspyre.Persist` for ordinary application files and
 blobs.
 
 This repository also builds `Darkspyre.Encryption`, which encrypts application data at rest: it
