@@ -1,0 +1,34 @@
+name: Publish Darkspyre.SecureStore
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v5
+        with:
+          global-json-file: global.json
+      - name: Restore
+        run: dotnet restore tests/SecureStore.Tests/SecureStore.Tests.csproj
+      - name: Test
+        run: dotnet test tests/SecureStore.Tests/SecureStore.Tests.csproj --configuration Release --no-restore
+      - name: Pack
+        run: dotnet pack src/SecureStore/SecureStore.csproj --configuration Release --no-build --no-restore -p:ContinuousIntegrationBuild=true
+      - name: NuGet login
+        uses: NuGet/login@v1
+        id: login
+        with:
+          user: darkspyre
+      - name: Publish
+        env:
+          NUGET_API_KEY: ${{ steps.login.outputs.NUGET_API_KEY }}
+        run: dotnet nuget push "artifacts/packages/Darkspyre.SecureStore.*.nupkg" --api-key "$NUGET_API_KEY" --source https://api.nuget.org/v3/index.json
