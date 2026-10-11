@@ -14,6 +14,7 @@ public sealed class AesGcmSecretProtector : ISecretProtector, IDisposable
 
     private readonly AesGcm _cipher;
 
+    /// <summary>Creates a protector that encrypts under the given AES key.</summary>
     /// <param name="key">A 16, 24, or 32 byte key. The host is responsible for holding it.</param>
     public AesGcmSecretProtector(ReadOnlySpan<byte> key)
     {
