@@ -10,7 +10,7 @@
     <Deterministic>true</Deterministic>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <NoWarn>$(NoWarn);CS1591</NoWarn>
-    <Copyright>Copyright © 2026 Brandon Mathis. All rights reserved.</Copyright>
+    <Copyright>Copyright (c) 2026 Darkspyre Studios, LLC</Copyright>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(IsPackable)' != 'false'">
@@ -19,8 +19,8 @@
     <Company>Mathis</Company>
     <RepositoryType>git</RepositoryType>
     <RepositoryUrl>https://github.com/DarkspyreStudios/SecureStore</RepositoryUrl>
-    <PackageLicenseFile>LICENSE.md</PackageLicenseFile>
-    <PackageRequireLicenseAcceptance>true</PackageRequireLicenseAcceptance>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <PackageOutputPath>$(MSBuildThisFileDirectory)artifacts/packages</PackageOutputPath>
   </PropertyGroup>
