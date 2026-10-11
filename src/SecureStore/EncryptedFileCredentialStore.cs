@@ -18,6 +18,7 @@ public sealed class EncryptedFileCredentialStore : ICredentialStore, IDisposable
     private readonly string _filePath;
     private readonly SemaphoreSlim _gate = new(1, 1);
 
+    /// <summary>Creates a store over the file at <paramref name="filePath"/>, encrypting each secret with <paramref name="protector"/>.</summary>
     public EncryptedFileCredentialStore(ISecretProtector protector, string filePath)
     {
         ArgumentNullException.ThrowIfNull(protector);
@@ -26,6 +27,7 @@ public sealed class EncryptedFileCredentialStore : ICredentialStore, IDisposable
         _filePath = Path.GetFullPath(filePath);
     }
 
+    /// <inheritdoc />
     public async ValueTask<string?> GetAsync(string name, CancellationToken cancellationToken = default)
     {
         string key = CredentialName.Normalize(name);
@@ -54,6 +56,7 @@ public sealed class EncryptedFileCredentialStore : ICredentialStore, IDisposable
         }
     }
 
+    /// <inheritdoc />
     public async ValueTask SetAsync(string name, string secret, CancellationToken cancellationToken = default)
     {
         string key = CredentialName.Normalize(name);
@@ -81,6 +84,7 @@ public sealed class EncryptedFileCredentialStore : ICredentialStore, IDisposable
         }
     }
 
+    /// <inheritdoc />
     public async ValueTask DeleteAsync(string name, CancellationToken cancellationToken = default)
     {
         string key = CredentialName.Normalize(name);
@@ -99,6 +103,7 @@ public sealed class EncryptedFileCredentialStore : ICredentialStore, IDisposable
         }
     }
 
+    /// <summary>Releases the lock that serializes access to the file.</summary>
     public void Dispose() => _gate.Dispose();
 
     private async Task<Dictionary<string, string>> ReadAsync(CancellationToken cancellationToken)

@@ -25,6 +25,7 @@ public sealed class AesGcmSecretProtector : ISecretProtector, IDisposable
         _cipher = new AesGcm(key, TagLength);
     }
 
+    /// <summary>Encrypts <paramref name="plaintext"/> under a fresh random nonce and returns the nonce, tag and ciphertext.</summary>
     public byte[] Protect(byte[] plaintext)
     {
         ArgumentNullException.ThrowIfNull(plaintext);
@@ -39,6 +40,7 @@ public sealed class AesGcmSecretProtector : ISecretProtector, IDisposable
         return output;
     }
 
+    /// <summary>Verifies and decrypts output of <see cref="Protect"/>. Throws <see cref="SecureStoreException"/> when the data is truncated or fails authentication.</summary>
     public byte[] Unprotect(byte[] ciphertext)
     {
         ArgumentNullException.ThrowIfNull(ciphertext);
@@ -66,5 +68,6 @@ public sealed class AesGcmSecretProtector : ISecretProtector, IDisposable
         }
     }
 
+    /// <summary>Releases the AES-GCM cipher.</summary>
     public void Dispose() => _cipher.Dispose();
 }

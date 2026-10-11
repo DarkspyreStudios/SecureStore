@@ -8,7 +8,9 @@ namespace SecureStore;
 /// </summary>
 public interface ISecretProtector
 {
+    /// <summary>Encrypts <paramref name="plaintext"/> and returns data that <see cref="Unprotect"/> accepts.</summary>
     byte[] Protect(byte[] plaintext);
 
+    /// <summary>Verifies and decrypts data that <see cref="Protect"/> returned, and returns the plaintext.</summary>
     byte[] Unprotect(byte[] ciphertext);
 }

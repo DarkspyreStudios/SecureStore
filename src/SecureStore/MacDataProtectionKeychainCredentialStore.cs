@@ -28,6 +28,7 @@ public sealed class MacDataProtectionKeychainCredentialStore : ICredentialStore,
     private readonly SemaphoreSlim _gate = new(1, 1);
     private bool _accessVerified;
 
+    /// <summary>Creates a store that files items under the service name and label in <paramref name="options"/>.</summary>
     public MacDataProtectionKeychainCredentialStore(SecureStoreOptions options)
     {
         ArgumentNullException.ThrowIfNull(options);
@@ -36,6 +37,7 @@ public sealed class MacDataProtectionKeychainCredentialStore : ICredentialStore,
         _label = options.ResolvedLabel;
     }
 
+    /// <inheritdoc />
     public async ValueTask<string?> GetAsync(string name, CancellationToken cancellationToken = default)
     {
         string account = Prepare(name);
@@ -78,6 +80,7 @@ public sealed class MacDataProtectionKeychainCredentialStore : ICredentialStore,
         }
     }
 
+    /// <inheritdoc />
     public async ValueTask SetAsync(string name, string secret, CancellationToken cancellationToken = default)
     {
         string account = Prepare(name);
@@ -122,6 +125,7 @@ public sealed class MacDataProtectionKeychainCredentialStore : ICredentialStore,
         }
     }
 
+    /// <inheritdoc />
     public async ValueTask DeleteAsync(string name, CancellationToken cancellationToken = default)
     {
         string account = Prepare(name);
@@ -142,6 +146,7 @@ public sealed class MacDataProtectionKeychainCredentialStore : ICredentialStore,
         }
     }
 
+    /// <summary>Releases the lock that serializes keychain calls.</summary>
     public void Dispose() => _gate.Dispose();
 
     /// <summary>

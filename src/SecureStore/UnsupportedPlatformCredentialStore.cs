@@ -10,12 +10,15 @@ public sealed class UnsupportedPlatformCredentialStore : ICredentialStore
         "SecureStore supports macOS Keychain, Windows Credential Manager, and the Linux Secret Service. "
         + "Set SecureStoreOptions.Fallback to choose what this host uses instead.";
 
+    /// <inheritdoc />
     public ValueTask<string?> GetAsync(string name, CancellationToken cancellationToken = default) =>
         throw new PlatformNotSupportedException(Explanation);
 
+    /// <inheritdoc />
     public ValueTask SetAsync(string name, string secret, CancellationToken cancellationToken = default) =>
         throw new PlatformNotSupportedException(Explanation);
 
+    /// <inheritdoc />
     public ValueTask DeleteAsync(string name, CancellationToken cancellationToken = default) =>
         throw new PlatformNotSupportedException(Explanation);
 }

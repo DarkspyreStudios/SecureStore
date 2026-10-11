@@ -11,6 +11,7 @@ public sealed class InMemoryCredentialStore : ICredentialStore
     private readonly Dictionary<string, string> _secrets = new(StringComparer.Ordinal);
     private readonly Lock _gate = new();
 
+    /// <inheritdoc />
     public ValueTask<string?> GetAsync(string name, CancellationToken cancellationToken = default)
     {
         string key = CredentialName.Normalize(name);
@@ -20,6 +21,7 @@ public sealed class InMemoryCredentialStore : ICredentialStore
         }
     }
 
+    /// <inheritdoc />
     public ValueTask SetAsync(string name, string secret, CancellationToken cancellationToken = default)
     {
         string key = CredentialName.Normalize(name);
@@ -32,6 +34,7 @@ public sealed class InMemoryCredentialStore : ICredentialStore
         return ValueTask.CompletedTask;
     }
 
+    /// <inheritdoc />
     public ValueTask DeleteAsync(string name, CancellationToken cancellationToken = default)
     {
         string key = CredentialName.Normalize(name);

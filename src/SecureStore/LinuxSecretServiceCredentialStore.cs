@@ -16,6 +16,7 @@ public sealed class LinuxSecretServiceCredentialStore : ICredentialStore, IDispo
     private readonly string _label;
     private readonly SemaphoreSlim _gate = new(1, 1);
 
+    /// <summary>Creates a store that saves secrets under the service name and label in <paramref name="options"/>.</summary>
     public LinuxSecretServiceCredentialStore(SecureStoreOptions options)
     {
         ArgumentNullException.ThrowIfNull(options);
@@ -24,6 +25,7 @@ public sealed class LinuxSecretServiceCredentialStore : ICredentialStore, IDispo
         _label = options.ResolvedLabel;
     }
 
+    /// <inheritdoc />
     public async ValueTask<string?> GetAsync(string name, CancellationToken cancellationToken = default)
     {
         string account = Prepare(name);
@@ -48,6 +50,7 @@ public sealed class LinuxSecretServiceCredentialStore : ICredentialStore, IDispo
         }
     }
 
+    /// <inheritdoc />
     public async ValueTask SetAsync(string name, string secret, CancellationToken cancellationToken = default)
     {
         string account = Prepare(name);
@@ -67,6 +70,7 @@ public sealed class LinuxSecretServiceCredentialStore : ICredentialStore, IDispo
         }
     }
 
+    /// <inheritdoc />
     public async ValueTask DeleteAsync(string name, CancellationToken cancellationToken = default)
     {
         string account = Prepare(name);
@@ -88,6 +92,7 @@ public sealed class LinuxSecretServiceCredentialStore : ICredentialStore, IDispo
         }
     }
 
+    /// <summary>Releases the lock that serializes calls to <c>secret-tool</c>.</summary>
     public void Dispose() => _gate.Dispose();
 
     private static string Prepare(string name)

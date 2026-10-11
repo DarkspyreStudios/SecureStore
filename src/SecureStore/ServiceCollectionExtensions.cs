@@ -2,6 +2,7 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace SecureStore;
 
+/// <summary>Registers the secure credential store in a dependency injection container.</summary>
 public static class ServiceCollectionExtensions
 {
     /// <summary>
