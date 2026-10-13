@@ -7,8 +7,12 @@ namespace SecureStore.Tests;
 /// up the entries it makes. The service name belongs to the test suite, so nothing here can reach
 /// a secret an application stored.
 /// </summary>
+[Collection(SecretToolCollection)]
 public sealed class NativeVaultTests
 {
+    /// <summary>The collection of tests that reach <c>secret-tool</c> through <c>PATH</c>; its tests never run in parallel.</summary>
+    public const string SecretToolCollection = "secret-tool";
+
     private static readonly SecureStoreOptions Options = new()
     {
         ServiceName = "com.darkspyrestudios.securestore.tests",

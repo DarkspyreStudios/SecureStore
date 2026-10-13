@@ -368,3 +368,4 @@ Assert.Equal("test-token", await credentials.GetAsync("refresh-token"));
 | Host with no vault and no fallback | `PlatformNotSupportedException` |
 | macOS with `RequireApplicationIsolation` and no keychain access group | `SecureStoreException` on every call |
 | Linux host without `secret-tool` | `PlatformNotSupportedException` |
+| Linux Secret Service gives no answer within 10 seconds, such as a locked keyring waiting on an unlock prompt | `SecureStoreException` |

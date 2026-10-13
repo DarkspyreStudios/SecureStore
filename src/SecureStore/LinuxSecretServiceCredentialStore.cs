@@ -12,6 +12,12 @@ namespace SecureStore;
 [SupportedOSPlatform("linux")]
 public sealed class LinuxSecretServiceCredentialStore : ICredentialStore, IDisposable
 {
+    // A locked keyring makes secret-tool wait on an unlock prompt that may never be answered. Each call ends after
+    // this limit and reports a vault failure, so an application that tolerates an unavailable vault keeps starting.
+    // A healthy Secret Service answers in well under a second. Ten seconds stays well under the start-up deadlines
+    // of the applications that read secrets while they start.
+    private static readonly TimeSpan CallTimeout = TimeSpan.FromSeconds(10);
+
     private readonly string _serviceName;
     private readonly string _label;
     private readonly SemaphoreSlim _gate = new(1, 1);
@@ -137,32 +143,45 @@ public sealed class LinuxSecretServiceCredentialStore : ICredentialStore, IDispo
                 exception);
         }
 
-        Task<string> standardOutput = process.StandardOutput.ReadToEndAsync(cancellationToken);
-        Task<string> standardError = process.StandardError.ReadToEndAsync(cancellationToken);
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        timeout.CancelAfter(CallTimeout);
+        Task<string> standardOutput = process.StandardOutput.ReadToEndAsync(timeout.Token);
+        Task<string> standardError = process.StandardError.ReadToEndAsync(timeout.Token);
         try
         {
             if (standardInput is not null)
             {
-                await process.StandardInput.WriteAsync(standardInput.AsMemory(), cancellationToken).ConfigureAwait(false);
-                await process.StandardInput.FlushAsync(cancellationToken).ConfigureAwait(false);
+                await process.StandardInput.WriteAsync(standardInput.AsMemory(), timeout.Token).ConfigureAwait(false);
+                await process.StandardInput.FlushAsync(timeout.Token).ConfigureAwait(false);
             }
 
             process.StandardInput.Close();
 
-            await process.WaitForExitAsync(cancellationToken).ConfigureAwait(false);
+            await process.WaitForExitAsync(timeout.Token).ConfigureAwait(false);
             return new SecretToolResult(
                 process.ExitCode,
                 await standardOutput.ConfigureAwait(false),
                 await standardError.ConfigureAwait(false));
         }
+        catch (OperationCanceledException exception) when (!cancellationToken.IsCancellationRequested)
+        {
+            Stop(process);
+            throw new SecureStoreException(
+                $"Linux Secret Service did not answer within {CallTimeout.TotalSeconds:0} seconds. The keyring may be locked.",
+                exception);
+        }
         catch
         {
-            if (!process.HasExited)
-            {
-                process.Kill(entireProcessTree: true);
-            }
-
+            Stop(process);
             throw;
+        }
+    }
+
+    private static void Stop(Process process)
+    {
+        if (!process.HasExited)
+        {
+            process.Kill(entireProcessTree: true);
         }
     }
 
