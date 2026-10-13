@@ -177,11 +177,13 @@ public sealed class LinuxSecretServiceCredentialStore : ICredentialStore, IDispo
         }
     }
 
+    // Waiting after the kill lets the runtime reap the child; a child killed and then disposed stays a zombie.
     private static void Stop(Process process)
     {
         if (!process.HasExited)
         {
             process.Kill(entireProcessTree: true);
+            process.WaitForExit();
         }
     }
 
