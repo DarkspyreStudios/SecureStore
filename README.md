@@ -31,6 +31,19 @@ those differences:
 SecureStore stores secrets only. Use `Darkspyre.Persist` for ordinary application files and
 blobs.
 
+## iOS source backend
+
+`src/SecureStore.iOS` builds the separate `net11.0-ios` backend. The default desktop/Linux solution
+does not include this project. An iOS host references it and supplies
+`Fallback = () => new IosKeychainCredentialStore(options)` to `CredentialStoreFactory.Create`.
+The backend shares service validation and credential-name normalization with SecureStore.
+Generic-password items use the explicit service/account identity, disable synchronization and use
+`AfterFirstUnlockThisDeviceOnly` accessibility. Updates retain an existing item's identity.
+
+The .NET 11 iOS simulator library build passes with zero warnings. Device Keychain behavior remains
+unqualified until the signed phone acceptance run. The backend uses the official
+[SecKeyChain API](https://learn.microsoft.com/en-us/dotnet/api/security.seckeychain.queryasdata).
+
 This repository also builds `Darkspyre.Encryption`, which encrypts application data at rest: it
 derives per-store keys from a vault root key, seals files in an authenticated envelope, and opens,
 locks and converts SQLCipher databases. See [src/Encryption/README.md](src/Encryption/README.md).
