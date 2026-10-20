@@ -35,6 +35,20 @@ This repository also builds `Darkspyre.Encryption`, which encrypts application d
 derives per-store keys from a vault root key, seals files in an authenticated envelope, and opens,
 locks and converts SQLCipher databases. See [src/Encryption/README.md](src/Encryption/README.md).
 
+## Tests
+
+`tests/SecureStore.Tests` exercises the in-memory and encrypted-file stores, options and the isolated
+Secret Service timeout. It runs inside an application session without accessing the operating-system vault.
+`tests/Encryption.Tests` covers the encryption library.
+
+`tests/SecureStore.SandboxTests` holds the native vault tests, including macOS Keychain and Windows
+Credential Manager. Automated validation builds this project but never runs it. A person runs it from a
+normal terminal outside the application's sandbox. On macOS the test run uses the signed test host:
+
+```bash
+dotnet test tests/SecureStore.SandboxTests/SecureStore.SandboxTests.csproj -- RunConfiguration.DotNetHostPath=<signed test host>
+```
+
 ## Publishing
 
 The manually triggered `.github/workflows/publish.yml` workflow restores and runs

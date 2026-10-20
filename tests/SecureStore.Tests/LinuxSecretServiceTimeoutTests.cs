@@ -4,10 +4,9 @@ using SecureStore;
 namespace SecureStore.Tests;
 
 /// <summary>
-/// Puts a <c>secret-tool</c> that never answers first on <c>PATH</c>. The test shares a collection with
-/// <see cref="NativeVaultTests"/>, so no real vault test runs while the fake is on the path.
+/// Puts a <c>secret-tool</c> that never answers first on <c>PATH</c> to exercise the timeout without a real vault.
 /// </summary>
-[Collection(NativeVaultTests.SecretToolCollection)]
+[Collection("secret-tool")]
 public sealed class LinuxSecretServiceTimeoutTests
 {
     [Fact]
