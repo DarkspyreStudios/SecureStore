@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net11.0</TargetFramework>
+    <PackageId>Darkspyre.Encryption.Relay</PackageId>
+    <AssemblyName>Darkspyre.Encryption.Relay</AssemblyName>
+    <RootNamespace>Darkspyre.Encryption.Relay</RootNamespace>
+    <Description>End-to-end message sealing for a relay: ECDH on NIST P-256 with an ephemeral sender key, HKDF-SHA256 and AES-256-GCM.</Description>
+    <PackageTags>encryption;ecdh;aes-gcm;hkdf</PackageTags>
+  </PropertyGroup>
+
+</Project>

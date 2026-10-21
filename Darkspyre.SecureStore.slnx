@@ -1,9 +1,11 @@
 <Solution>
   <Folder Name="/src/">
     <Project Path="src/Encryption/Encryption.csproj" />
+    <Project Path="src/Encryption.Relay/Darkspyre.Encryption.Relay.csproj" />
     <Project Path="src/SecureStore/SecureStore.csproj" />
   </Folder>
   <Folder Name="/tests/">
+    <Project Path="tests/Encryption.Relay.Tests/Encryption.Relay.Tests.csproj" />
     <Project Path="tests/Encryption.Tests/Encryption.Tests.csproj" />
     <Project Path="tests/SecureStore.Tests/SecureStore.Tests.csproj" />
     <Project Path="tests/SecureStore.SandboxTests/SecureStore.SandboxTests.csproj" />

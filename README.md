@@ -31,7 +31,7 @@ those differences:
 SecureStore stores secrets only. Use `Darkspyre.Persist` for ordinary application files and
 blobs.
 
-## iOS source backend
+## SecureStore.iOS
 
 `src/SecureStore.iOS` builds the separate `net11.0-ios` backend. The default desktop/Linux solution
 does not include this project. An iOS host references it and supplies
@@ -48,11 +48,31 @@ This repository also builds `Darkspyre.Encryption`, which encrypts application d
 derives per-store keys from a vault root key, seals files in an authenticated envelope, and opens,
 locks and converts SQLCipher databases. See [src/Encryption/README.md](src/Encryption/README.md).
 
+## Encryption.Relay
+
+`src/Encryption.Relay` builds `Darkspyre.Encryption.Relay` (`net11.0`, no package references, no SQLite). It seals
+a message to one recipient's public key so that only the holder of the matching private key opens it. It is the
+encryption seam for end-to-end messages that travel through a relay server.
+
+- `IRelayCipher` creates a key pair (`CreateKeyPair`), seals plaintext to a public key (`Seal`) and opens a sealed
+  message with a key pair (`Open`). `Open` throws `CryptographicException` when the message is malformed, sealed to
+  another key pair or altered.
+- `RelayKeyPair` holds the SubjectPublicKeyInfo public key and the PKCS#8 private key. `Dispose` zeroes the private key.
+- `EcdhP256RelayCipher` is the implementation: ECDH on NIST P-256 with an ephemeral sender key
+  (`ECDiffieHellman.DeriveRawSecretAgreement`), a 32-byte key from HKDF-SHA256 with an empty salt and the info
+  `"darkspyre-relay"` followed by the recipient public key and the ephemeral public key, and AES-256-GCM.
+
+A sealed message is, in order: the big-endian `u16` length of the ephemeral public key, the ephemeral
+SubjectPublicKeyInfo, a 12-byte nonce, the ciphertext and a 16-byte tag.
+
+A sealed message does not authenticate its sender. The relay server states who sent a message.
+`tests/Encryption.Relay.Tests` covers the round trip and the refusal of a different key pair.
+
 ## Tests
 
 `tests/SecureStore.Tests` exercises the in-memory and encrypted-file stores, options and the isolated
 Secret Service timeout. It runs inside an application session without accessing the operating-system vault.
-`tests/Encryption.Tests` covers the encryption library.
+`tests/Encryption.Tests` covers the encryption library and `tests/Encryption.Relay.Tests` covers the relay cipher.
 
 `tests/SecureStore.SandboxTests` holds the native vault tests, including macOS Keychain and Windows
 Credential Manager. Automated validation builds this project but never runs it. A person runs it from a
@@ -79,7 +99,8 @@ This workflow does not build, test, pack, or publish `Darkspyre.Encryption`.
 
 `eng/SourceReferences.targets` replaces a consumer's `Darkspyre.SecureStore` package reference
 with the `src/SecureStore/SecureStore.csproj` project in this worktree, and its
-`Darkspyre.Encryption` package reference with `src/Encryption/Encryption.csproj`. The consumer imports it
+`Darkspyre.Encryption` package reference with `src/Encryption/Encryption.csproj`, and its `Darkspyre.Encryption.Relay` package reference with
+`src/Encryption.Relay/Darkspyre.Encryption.Relay.csproj`. The consumer imports it
 after declaring package references. Reference metadata is retained; runtime exclusions disable
 output copying, and compile exclusions disable the assembly reference.
 
