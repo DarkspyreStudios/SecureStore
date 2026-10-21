@@ -4,7 +4,8 @@
     <_SecureStoreSourceProject Include="@(PackageReference->WithMetadataValue('Identity', 'Darkspyre.SecureStore')->'$(MSBuildThisFileDirectory)../src/SecureStore/SecureStore.csproj')" />
     <_SecureStoreSourceProject Include="@(PackageReference->WithMetadataValue('Identity', 'Darkspyre.Encryption')->'$(MSBuildThisFileDirectory)../src/Encryption/Encryption.csproj')" />
     <_SecureStoreSourceProject Include="@(PackageReference->WithMetadataValue('Identity', 'Darkspyre.Encryption.Relay')->'$(MSBuildThisFileDirectory)../src/Encryption.Relay/Darkspyre.Encryption.Relay.csproj')" />
-    <PackageReference Remove="Darkspyre.SecureStore;Darkspyre.Encryption;Darkspyre.Encryption.Relay" />
+    <_SecureStoreSourceProject Include="@(PackageReference->WithMetadataValue('Identity', 'SecureStore.iOS')->'$(MSBuildThisFileDirectory)../src/SecureStore.iOS/SecureStore.iOS.csproj')" />
+    <PackageReference Remove="Darkspyre.SecureStore;Darkspyre.Encryption;Darkspyre.Encryption.Relay;SecureStore.iOS" />
     <ProjectReference Include="@(_SecureStoreSourceProject)">
       <Private Condition="'%(ExcludeAssets)' == 'all' or $([System.String]::Copy(';%(ExcludeAssets);').Contains(';runtime;'))">false</Private>
       <ReferenceOutputAssembly Condition="'%(ExcludeAssets)' == 'all' or $([System.String]::Copy(';%(ExcludeAssets);').Contains(';compile;'))">false</ReferenceOutputAssembly>
