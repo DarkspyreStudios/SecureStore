@@ -84,6 +84,9 @@ dotnet test tests/SecureStore.SandboxTests/SecureStore.SandboxTests.csproj -- Ru
 
 ## Publishing
 
+Each packable library keeps its consumer page in `PACKAGE.md` beside its project and packs that page as `README.md`.
+This repository README and `src/Encryption/README.md` keep the design and development record and are not packed.
+
 The manually triggered `.github/workflows/publish.yml` workflow restores and runs
 `SecureStore.Tests` in Release, then packs only `Darkspyre.SecureStore`.
 It publishes the version declared in `Directory.Build.props` to nuget.org.
@@ -93,7 +96,7 @@ owns the matching Trusted Publishing policy for `SecureStore`, `publish.yml`,
 and the exact package pattern `Darkspyre.SecureStore`. No environment is specified.
 A failed step stops publication. An existing package version is not overwritten
 or silently skipped. A successful publication completes policy activation.
-This workflow does not build, test, pack, or publish `Darkspyre.Encryption`.
+This workflow does not build, test, pack, or publish `Darkspyre.Encryption` or `Darkspyre.Encryption.Relay`.
 
 ## Local source consumption
 

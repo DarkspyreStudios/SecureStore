@@ -9,4 +9,8 @@
     <PackageTags>encryption;ecdh;aes-gcm;hkdf</PackageTags>
   </PropertyGroup>
 
+  <ItemGroup>
+    <None Include="PACKAGE.md" Pack="true" PackagePath="README.md" />
+  </ItemGroup>
+
 </Project>

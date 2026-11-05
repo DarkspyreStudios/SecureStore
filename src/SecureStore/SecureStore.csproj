@@ -13,7 +13,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <None Include="..\..\README.md" Pack="true" PackagePath="README.md" />
+    <None Include="PACKAGE.md" Pack="true" PackagePath="README.md" />
   </ItemGroup>
 
 </Project>
