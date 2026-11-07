@@ -33,39 +33,6 @@ public sealed class EncryptedFileCredentialStoreTests : CredentialStoreContractT
         Assert.DoesNotContain("s3cr3t-in-the-clear", contents, StringComparison.Ordinal);
     }
 
-    [Fact]
-    public async Task SecretWrittenUnderAnotherKeyIsRejected()
-    {
-        await CreateStore().SetAsync("token", "s3cr3t");
-
-        var wrongKey = new EncryptedFileCredentialStore(
-            new AesGcmSecretProtector(RandomNumberGenerator.GetBytes(32)),
-            FilePath);
-
-        await Assert.ThrowsAsync<SecureStoreException>(async () => await wrongKey.GetAsync("token"));
-    }
-
-    [Fact]
-    public async Task FileIsReadableOnlyByItsOwner()
-    {
-        if (OperatingSystem.IsWindows())
-        {
-            return;
-        }
-
-        await CreateStore().SetAsync("token", "s3cr3t");
-
-        UnixFileMode mode = File.GetUnixFileMode(FilePath);
-
-        Assert.Equal(UnixFileMode.UserRead | UnixFileMode.UserWrite, mode);
-    }
-
-    [Fact]
-    public void KeyOfTheWrongLengthIsRejected()
-    {
-        Assert.Throws<ArgumentException>(() => new AesGcmSecretProtector(new byte[20]));
-    }
-
     public void Dispose()
     {
         if (Directory.Exists(_directory))

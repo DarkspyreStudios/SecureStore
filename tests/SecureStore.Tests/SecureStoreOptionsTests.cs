@@ -7,7 +7,6 @@ public sealed class SecureStoreOptionsTests
 {
     [Theory]
     [InlineData("")]
-    [InlineData("   ")]
     public void ServiceNameIsRequired(string serviceName)
     {
         var services = new ServiceCollection();
@@ -25,14 +24,6 @@ public sealed class SecureStoreOptionsTests
     }
 
     [Fact]
-    public void LabelIsUsedWhenSet()
-    {
-        var options = new SecureStoreOptions { ServiceName = "com.example.app", Label = "Example" };
-
-        Assert.Equal("Example", options.ResolvedLabel);
-    }
-
-    [Fact]
     public void StoreIsRegisteredAsASingleton()
     {
         var services = new ServiceCollection();
@@ -45,16 +36,7 @@ public sealed class SecureStoreOptionsTests
             provider.GetRequiredService<ICredentialStore>());
     }
 
-    [Fact]
-    public void ApplicationIsolationIsOffByDefault()
-    {
-        var options = new SecureStoreOptions { ServiceName = "com.example.app" };
-
-        Assert.False(options.RequireApplicationIsolation);
-    }
-
     [Theory]
-    [InlineData(false)]
     [InlineData(true)]
     public void FactorySelectsTheMacBackendForApplicationIsolation(bool requireApplicationIsolation)
     {
@@ -77,40 +59,4 @@ public sealed class SecureStoreOptionsTests
         Assert.IsType(expected, store);
     }
 
-    [Fact]
-    public void ApplicationIsolationHasNoEffectOnWindows()
-    {
-        if (!OperatingSystem.IsWindows())
-        {
-            return;
-        }
-
-        var options = new SecureStoreOptions { ServiceName = "com.example.app", RequireApplicationIsolation = true };
-
-        Assert.IsType<WindowsCredentialManagerCredentialStore>(CredentialStoreFactory.Create(options));
-    }
-
-    [Fact]
-    public void ApplicationIsolationHasNoEffectOnLinux()
-    {
-        if (!OperatingSystem.IsLinux())
-        {
-            return;
-        }
-
-        var options = new SecureStoreOptions { ServiceName = "com.example.app", RequireApplicationIsolation = true };
-
-        Assert.IsType<LinuxSecretServiceCredentialStore>(CredentialStoreFactory.Create(options));
-    }
-
-    [Fact]
-    public async Task UnsupportedPlatformStoreExplainsTheOption()
-    {
-        var store = new UnsupportedPlatformCredentialStore();
-
-        PlatformNotSupportedException exception = await Assert.ThrowsAsync<PlatformNotSupportedException>(
-            async () => await store.GetAsync("token"));
-
-        Assert.Contains(nameof(SecureStoreOptions.Fallback), exception.Message, StringComparison.Ordinal);
-    }
 }

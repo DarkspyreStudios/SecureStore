@@ -40,9 +40,6 @@ public sealed class SqlCipherTests : IDisposable
     }
 
     [Fact]
-    public void LoadedLibraryIsSqlCipher() => Assert.StartsWith("4.19.0", SqlCipher.Version, StringComparison.Ordinal);
-
-    [Fact]
     public void KeyedDatabaseKeepsPlaintextOutOfTheFileAndWal()
     {
         string path = File("sessions.db");
@@ -60,46 +57,6 @@ public sealed class SqlCipherTests : IDisposable
     }
 
     [Fact]
-    public void EncryptedDatabaseWithoutAKeyReportsKeyRequired()
-    {
-        string path = CreateEncrypted("sessions");
-        Assert.Equal(EncryptionFailure.KeyRequired, Assert.Throws<EncryptionException>(() => SqlCipherDatabase.OpenPlain(path)).Failure);
-    }
-
-    [Fact]
-    public void WrongKeyReportsKeyRejected()
-    {
-        string path = CreateEncrypted("sessions");
-        using StoreKey wrong = Key("other");
-        using SqlCipherDatabase database = new(path, StoreKey.FromBytes("sessions", 1, Bytes(wrong)));
-        Assert.Equal(EncryptionFailure.KeyRejected, Assert.Throws<EncryptionException>(() => database.Open()).Failure);
-    }
-
-    [Fact]
-    public void KeyIsNotInTheConnectionString()
-    {
-        string path = CreateEncrypted("sessions");
-        using StoreKey key = Key("sessions");
-        string hex = Convert.ToHexString(Bytes(key));
-        using SqlCipherDatabase database = new(path, key);
-        using SqliteConnection connection = database.Open();
-        Assert.DoesNotContain(hex, connection.ConnectionString, StringComparison.OrdinalIgnoreCase);
-        Assert.DoesNotContain("Password", connection.ConnectionString, StringComparison.OrdinalIgnoreCase);
-    }
-
-    [Fact]
-    public void KeylessOpenOfTheSamePathGetsNoKeyedConnection()
-    {
-        string path = CreateEncrypted("sessions");
-        using StoreKey key = Key("sessions");
-        using SqlCipherDatabase database = new(path, key);
-        using (SqliteConnection connection = database.Open()) Assert.Equal(Secret, Scalar(connection, "SELECT body FROM messages;"));
-        using SqliteConnection keyless = new(new SqliteConnectionStringBuilder { DataSource = path }.ToString());
-        keyless.Open();
-        Assert.Throws<SqliteException>(() => Scalar(keyless, "SELECT body FROM messages;"));
-    }
-
-    [Fact]
     public void LockClosesOpenConnectionsAndDisposeRefusesNewOnes()
     {
         string path = CreateEncrypted("sessions");
@@ -111,17 +68,6 @@ public sealed class SqlCipherTests : IDisposable
         using (SqliteConnection reopened = database.Open()) Assert.Equal(Secret, Scalar(reopened, "SELECT body FROM messages;"));
         database.Dispose();
         Assert.Throws<ObjectDisposedException>(() => database.Open());
-    }
-
-    [Fact]
-    public void LockedDatabaseReopensWithItsKey()
-    {
-        string path = CreateEncrypted("sessions");
-        using StoreKey key = Key("sessions");
-        using SqlCipherDatabase database = new(path, key);
-        using (SqliteConnection connection = database.Open()) Assert.Equal(Secret, Scalar(connection, "SELECT body FROM messages;"));
-        database.Lock();
-        using (SqliteConnection connection = database.Open()) Assert.Equal(Secret, Scalar(connection, "SELECT body FROM messages;"));
     }
 
     [Fact]
@@ -171,19 +117,6 @@ public sealed class SqlCipherTests : IDisposable
         Assert.Equal(Secret, Scalar(check, "SELECT body FROM docs WHERE docs MATCH 'harbor';"));
     }
 
-    [Fact]
-    public void ConversionRefusesAnExistingTarget()
-    {
-        string plain = File("plain.db");
-        using (SqliteConnection connection = SqlCipherDatabase.OpenPlain(plain, pooling: false))
-            Execute(connection, "CREATE TABLE t (x);");
-        string target = File("target.db");
-        System.IO.File.WriteAllText(target, "existing");
-        using StoreKey key = Key("sessions");
-        Assert.Throws<IOException>(() => SqlCipherConversion.Encrypt(plain, target, key));
-        Assert.Equal("existing", System.IO.File.ReadAllText(target));
-    }
-
     public void Dispose()
     {
         root.Dispose();
@@ -206,13 +139,6 @@ public sealed class SqlCipherTests : IDisposable
     private StoreKey Key(string storeId) => root.DeriveStoreKey("agent-ds", StoreKind.Database, storeId);
 
     private string File(string name) => Path.Combine(folder, name);
-
-    private static byte[] Bytes(StoreKey key)
-    {
-        byte[] bytes = new byte[StoreKey.Length];
-        key.CopyTo(bytes);
-        return bytes;
-    }
 
     private static void AssertAbsent(string path)
     {

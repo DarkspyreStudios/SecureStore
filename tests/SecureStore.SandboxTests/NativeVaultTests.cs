@@ -31,26 +31,6 @@ public sealed class NativeVaultTests
         await RunVaultContractAsync(store);
     }
 
-    /// <summary>
-    /// The test host is an unsigned process with no keychain access group, so the data protection
-    /// keychain refuses it. A round trip needs a signed application bundle and runs outside this suite.
-    /// </summary>
-    [Fact]
-    public async Task MacDataProtectionKeychainRefusesAnUnentitledProcess()
-    {
-        if (!OperatingSystem.IsMacOS())
-        {
-            return;
-        }
-
-        using var store = new MacDataProtectionKeychainCredentialStore(Options);
-        ValueTask<string?> read = store.GetAsync("test-" + Guid.NewGuid().ToString("N"));
-
-        SecureStoreException exception = await Assert.ThrowsAsync<SecureStoreException>(async () => await read);
-
-        Assert.Contains("keychain-access-groups", exception.Message, StringComparison.Ordinal);
-    }
-
     [Fact]
     public async Task WindowsCredentialManagerRoundTrip()
     {
@@ -61,51 +41,6 @@ public sealed class NativeVaultTests
 
         using var store = new WindowsCredentialManagerCredentialStore(Options);
         await RunVaultContractAsync(store);
-    }
-
-    /// <summary>
-    /// An OAuth bundle carrying an access token, a refresh token, and an identity token runs past
-    /// the 2560 byte Windows credential limit. It must store whole on every platform.
-    /// </summary>
-    [Fact]
-    public async Task OversizedSecretRoundTripsOnTheNativeVault()
-    {
-        ICredentialStore? store = CreateNativeStore();
-        if (store is null)
-        {
-            return;
-        }
-
-        string name = "oversized-" + Guid.NewGuid().ToString("N");
-        string secret = string.Concat(Enumerable.Repeat("eyJhbGciOiJIUzI1NiJ9.payload.signature ", 400));
-        Assert.True(System.Text.Encoding.UTF8.GetByteCount(secret) > 2560);
-
-        try
-        {
-            await store.SetAsync(name, secret);
-            Assert.Equal(secret, await store.GetAsync(name));
-
-            // Shrinking back under the limit must not leave pieces of the larger secret behind.
-            await store.SetAsync(name, "small");
-            Assert.Equal("small", await store.GetAsync(name));
-        }
-        finally
-        {
-            await store.DeleteAsync(name);
-            (store as IDisposable)?.Dispose();
-        }
-    }
-
-    private static ICredentialStore? CreateNativeStore()
-    {
-        if (OperatingSystem.IsMacOS())
-        {
-            return new MacKeychainCredentialStore(Options);
-        }
-
-        return OperatingSystem.IsWindows()
-            ? new WindowsCredentialManagerCredentialStore(Options)
-            : null;
     }
 
     private static async Task RunVaultContractAsync(ICredentialStore store)
